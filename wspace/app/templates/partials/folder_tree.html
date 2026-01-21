@@ -1,18 +1,68 @@
 {% macro render_folder(folder, depth=0) %}
-<div class="folder-item" style="padding-left: {{ depth * 12 }}px;">
-    <a href="{{ url_for('notes.index', folder_id=folder.id) }}"
-       class="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 rounded hover:bg-gray-100 group
-              {% if request.args.get('folder_id')|int == folder.id %}bg-blue-50 text-blue-700{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-        </svg>
-        <span class="truncate">{{ folder.name }}</span>
-        <span class="ml-auto text-xs text-gray-400">{{ folder.notes.count() }}</span>
-    </a>
+<div class="folder-item group" data-folder-id="{{ folder.id }}">
+    <div class="flex items-center gap-1 py-1 rounded hover:bg-gray-100" style="padding-left: {{ depth * 16 + 8 }}px;">
+        <!-- Expand/collapse toggle -->
+        {% if folder.children.count() > 0 %}
+        <button onclick="this.closest('.folder-item').querySelector('.folder-children').classList.toggle('hidden'); this.querySelector('svg').classList.toggle('rotate-90')"
+                class="p-0.5 text-gray-400 hover:text-gray-600">
+            <svg class="w-3 h-3 transition-transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+            </svg>
+        </button>
+        {% else %}
+        <span class="w-4"></span>
+        {% endif %}
+
+        <!-- Folder link -->
+        <a href="{{ url_for('notes.index', folder_id=folder.id) }}"
+           class="flex-1 flex items-center gap-2 text-sm text-gray-700 truncate
+                  {% if request.args.get('folder_id')|int == folder.id %}text-blue-700 font-medium{% endif %}">
+            <svg class="w-4 h-4 flex-shrink-0 {% if request.args.get('folder_id')|int == folder.id %}text-blue-500{% else %}text-gray-400{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+            </svg>
+            <span class="truncate">{{ folder.name }}</span>
+        </a>
+
+        <!-- Note count -->
+        <span class="text-xs text-gray-400 mr-1">{{ folder.notes.count() }}</span>
+
+        <!-- Actions dropdown -->
+        <div class="relative hidden group-hover:block">
+            <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="p-1 text-gray-400 hover:text-gray-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+                </svg>
+            </button>
+            <div class="hidden absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                <!-- Add subfolder -->
+                <button onclick="showSubfolderForm({{ folder.id }}); this.parentElement.classList.add('hidden')"
+                        class="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
+                    Add subfolder
+                </button>
+                <!-- Rename -->
+                <button onclick="showRenameForm({{ folder.id }}, '{{ folder.name }}'); this.parentElement.classList.add('hidden')"
+                        class="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
+                    Rename
+                </button>
+                <!-- Delete -->
+                <button hx-post="{{ url_for('folders.delete_folder', folder_id=folder.id) }}"
+                        hx-target="#folder-tree"
+                        hx-confirm="Delete folder '{{ folder.name }}'? Notes will be moved to root."
+                        onclick="this.parentElement.classList.add('hidden')"
+                        class="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Children folders -->
     {% if folder.children.count() > 0 %}
+    <div class="folder-children">
         {% for child in folder.children %}
             {{ render_folder(child, depth + 1) }}
         {% endfor %}
+    </div>
     {% endif %}
 </div>
 {% endmacro %}
@@ -20,13 +70,55 @@
 <!-- All Notes -->
 <a href="{{ url_for('notes.index') }}"
    class="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 rounded hover:bg-gray-100 mb-1
-          {% if not request.args.get('folder_id') and not request.args.get('tag_id') %}bg-blue-50 text-blue-700{% endif %}">
+          {% if not request.args.get('folder_id') and not request.args.get('tag_id') %}bg-blue-50 text-blue-700 font-medium{% endif %}">
     <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
     </svg>
     <span>All Notes</span>
 </a>
 
+<!-- Subfolder form (hidden by default) -->
+<div id="subfolder-form" class="hidden px-2 py-2 bg-gray-50 rounded mb-2">
+    <form hx-post="/folders/new" hx-target="#folder-tree" hx-swap="innerHTML" onsubmit="this.parentElement.classList.add('hidden')">
+        <input type="hidden" name="parent_id" id="subfolder-parent-id">
+        <input type="text" name="name" placeholder="Subfolder name" required
+               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500">
+        <div class="flex gap-1 mt-1">
+            <button type="submit" class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Create</button>
+            <button type="button" onclick="this.closest('#subfolder-form').classList.add('hidden')" class="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+        </div>
+    </form>
+</div>
+
+<!-- Rename form (hidden by default) -->
+<div id="rename-form" class="hidden px-2 py-2 bg-gray-50 rounded mb-2">
+    <form id="rename-folder-form" hx-target="#folder-tree" hx-swap="innerHTML" onsubmit="this.parentElement.classList.add('hidden')">
+        <input type="text" name="name" id="rename-folder-name" required
+               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500">
+        <div class="flex gap-1 mt-1">
+            <button type="submit" class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Rename</button>
+            <button type="button" onclick="this.closest('#rename-form').classList.add('hidden')" class="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+        </div>
+    </form>
+</div>
+
 {% for folder in folders %}
     {{ render_folder(folder) }}
 {% endfor %}
+
+<script>
+function showSubfolderForm(parentId) {
+    document.getElementById('subfolder-parent-id').value = parentId;
+    document.getElementById('subfolder-form').classList.remove('hidden');
+    document.getElementById('subfolder-form').querySelector('input[name="name"]').focus();
+}
+
+function showRenameForm(folderId, currentName) {
+    const form = document.getElementById('rename-folder-form');
+    form.setAttribute('hx-post', '/folders/' + folderId + '/rename');
+    htmx.process(form);
+    document.getElementById('rename-folder-name').value = currentName;
+    document.getElementById('rename-form').classList.remove('hidden');
+    document.getElementById('rename-folder-name').focus();
+}
+</script>

@@ -14,7 +14,8 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
 
-    from app.routes import notes, folders, tags, search, sync
+    from app.routes import auth, notes, folders, tags, search, sync
+    app.register_blueprint(auth.bp)
     app.register_blueprint(notes.bp)
     app.register_blueprint(folders.bp)
     app.register_blueprint(tags.bp)

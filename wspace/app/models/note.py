@@ -7,6 +7,7 @@ class Note(db.Model):
     __tablename__ = 'notes'
 
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     title = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, default='')
     file_type = db.Column(db.String(10), default='md')  # 'txt' or 'md'

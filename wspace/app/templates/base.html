@@ -34,9 +34,24 @@
     <div class="flex h-full">
         <!-- Sidebar -->
         <aside class="w-64 bg-white border-r border-gray-200 flex flex-col">
-            <!-- Logo/Title -->
+            <!-- User Info & Logo -->
             <div class="p-4 border-b border-gray-200">
-                <h1 class="text-xl font-semibold text-gray-800">Notes</h1>
+                <div class="flex items-center justify-between mb-2">
+                    <h1 class="text-xl font-semibold text-gray-800">Notes</h1>
+                </div>
+                {% if user %}
+                <div class="flex items-center gap-2 mt-2">
+                    {% if user.picture %}
+                    <img src="{{ user.picture }}" alt="{{ user.name }}" class="w-6 h-6 rounded-full">
+                    {% else %}
+                    <div class="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs">
+                        {{ user.name[0] if user.name else user.email[0] }}
+                    </div>
+                    {% endif %}
+                    <span class="text-sm text-gray-600 truncate flex-1">{{ user.name or user.email }}</span>
+                    <a href="{{ url_for('auth.logout') }}" class="text-xs text-gray-400 hover:text-red-600">Logout</a>
+                </div>
+                {% endif %}
             </div>
 
             <!-- Search -->

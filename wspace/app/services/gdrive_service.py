@@ -17,13 +17,14 @@ class GDriveService:
         self._service = None
 
         if credentials_dict:
+            scopes = credentials_dict.get('scopes', SCOPES)
             self.credentials = Credentials(
                 token=credentials_dict.get('token'),
                 refresh_token=credentials_dict.get('refresh_token'),
                 token_uri='https://oauth2.googleapis.com/token',
                 client_id=config.get('GOOGLE_CLIENT_ID'),
                 client_secret=config.get('GOOGLE_CLIENT_SECRET'),
-                scopes=SCOPES
+                scopes=scopes
             )
 
     def get_auth_url(self):

@@ -57,7 +57,7 @@ def setup_fts(db_instance):
         conn.commit()
 
 
-def search_notes(query, limit=50):
+def search_notes(query, user_id=None, limit=50):
     """
     Search notes using FTS5 with BM25 ranking.
     Returns list of note dicts with search rank.
@@ -72,7 +72,8 @@ def search_notes(query, limit=50):
 
     try:
         with db.engine.connect() as conn:
-            result = conn.execute(text('''
+            # Build query with optional user filter
+            sql = '''
                 SELECT
                     notes.id,
                     notes.title,
@@ -85,9 +86,16 @@ def search_notes(query, limit=50):
                 FROM notes_fts
                 JOIN notes ON notes_fts.rowid = notes.id
                 WHERE notes_fts MATCH :query
-                ORDER BY rank
-                LIMIT :limit
-            '''), {'query': search_terms, 'limit': limit})
+            '''
+            params = {'query': search_terms, 'limit': limit}
+
+            if user_id is not None:
+                sql += ' AND notes.user_id = :user_id'
+                params['user_id'] = user_id
+
+            sql += ' ORDER BY rank LIMIT :limit'
+
+            result = conn.execute(text(sql), params)
 
             results = []
             for row in result:
@@ -110,12 +118,16 @@ def search_notes(query, limit=50):
     except Exception as e:
         current_app.logger.error(f"Search error: {e}")
         # Fallback to simple LIKE search if FTS fails
-        notes = Note.query.filter(
-            db.or_(
-                Note.title.ilike(f'%{query}%'),
-                Note.content.ilike(f'%{query}%')
-            )
-        ).limit(limit).all()
+        query_filter = db.or_(
+            Note.title.ilike(f'%{query}%'),
+            Note.content.ilike(f'%{query}%')
+        )
+        notes_query = Note.query.filter(query_filter)
+
+        if user_id is not None:
+            notes_query = notes_query.filter_by(user_id=user_id)
+
+        notes = notes_query.limit(limit).all()
 
         return [{
             'id': n.id,

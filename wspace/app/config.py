@@ -9,7 +9,8 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', f'sqlite:///{basedir}/instance/notes.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # Google Drive OAuth
+    # Google OAuth
     GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
     GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+    GOOGLE_AUTH_REDIRECT_URI = os.environ.get('GOOGLE_AUTH_REDIRECT_URI', 'http://localhost:5000/auth/callback')
     GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:5000/sync/oauth/callback')
