@@ -1,0 +1,56 @@
+{% if status and status.connected %}
+<div class="space-y-2">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2 text-sm text-green-600">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            <span>Google Drive</span>
+        </div>
+        <form hx-post="{{ url_for('sync.disconnect') }}" hx-target="#sync-status">
+            <button type="submit" class="text-xs text-gray-400 hover:text-red-600">Disconnect</button>
+        </form>
+    </div>
+
+    <div class="text-xs text-gray-500 space-y-1">
+        <div class="flex justify-between">
+            <span>Synced:</span>
+            <span class="text-green-600">{{ status.synced }}</span>
+        </div>
+        <div class="flex justify-between">
+            <span>Local:</span>
+            <span class="text-yellow-600">{{ status.local }}</span>
+        </div>
+        {% if status.conflicts > 0 %}
+        <div class="flex justify-between">
+            <span>Conflicts:</span>
+            <span class="text-red-600">{{ status.conflicts }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <button hx-post="{{ url_for('sync.sync_all') }}"
+            hx-target="#sync-status"
+            hx-indicator="#sync-spinner"
+            class="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition-colors">
+        <svg id="sync-spinner" class="htmx-indicator w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Sync All
+    </button>
+</div>
+{% else %}
+<div class="space-y-2">
+    <div class="flex items-center gap-2 text-sm text-gray-500">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <span>Google Drive</span>
+    </div>
+    <a href="{{ url_for('sync.connect') }}"
+       class="block w-full text-center px-3 py-1.5 text-sm text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition-colors">
+        Connect
+    </a>
+</div>
+{% endif %}

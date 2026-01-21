@@ -1,0 +1,7 @@
+{% if status == 'saved' %}
+<span class="text-green-600">Saved</span>
+{% elif status == 'error' %}
+<span class="text-red-600">Error saving</span>
+{% else %}
+<span class="text-gray-400">Saving...</span>
+{% endif %}

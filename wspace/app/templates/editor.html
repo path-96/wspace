@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if note %}{{ note.title }}{% else %}New Note{% endif %} - Notes{% endblock %}
+
+{% block content %}
+<form id="note-form"
+      {% if note %}
+      hx-post="{{ url_for('notes.edit_note', note_id=note.id) }}"
+      {% else %}
+      action="{{ url_for('notes.new_note') }}" method="post"
+      {% endif %}
+      class="flex-1 flex flex-col">
+
+    <!-- Editor Header -->
+    <div class="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
+        <div class="flex items-center gap-4 flex-1">
+            <a href="{{ url_for('notes.index') }}" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+            </a>
+            <input type="text" name="title" value="{{ note.title if note else '' }}"
+                   placeholder="Note title"
+                   class="flex-1 text-lg font-medium text-gray-900 border-0 focus:ring-0 focus:outline-none">
+        </div>
+
+        <div class="flex items-center gap-3">
+            <!-- File Type -->
+            <select name="file_type" class="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                <option value="md" {% if note and note.file_type == 'md' %}selected{% elif not note %}selected{% endif %}>.md</option>
+                <option value="txt" {% if note and note.file_type == 'txt' %}selected{% endif %}>.txt</option>
+            </select>
+
+            <!-- Folder -->
+            <select name="folder_id" class="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                <option value="">No folder</option>
+                {% for folder in folders %}
+                <option value="{{ folder.id }}" {% if note and note.folder_id == folder.id %}selected{% endif %}>
+                    {{ folder.name }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Preview Toggle (for markdown) -->
+            {% if note and note.file_type == 'md' %}
+            <button type="button"
+                    hx-get="{{ url_for('notes.preview_note', note_id=note.id) }}"
+                    hx-target="#preview-pane"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('preview-pane').classList.toggle('hidden'); document.getElementById('editor-pane').classList.toggle('hidden');"
+                    class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50">
+                Preview
+            </button>
+            {% endif %}
+
+            <!-- Save Status -->
+            <div id="save-status" class="text-sm text-gray-500">
+                {% if note %}
+                    <span class="text-green-600">Saved</span>
+                {% endif %}
+            </div>
+
+            <!-- Save Button -->
+            <button type="submit" id="save-btn"
+                    class="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Save
+            </button>
+
+            {% if note %}
+            <!-- Sync Button -->
+            <button type="button"
+                    hx-post="{{ url_for('sync.sync_note', note_id=note.id) }}"
+                    hx-target="#sync-note-status"
+                    hx-swap="innerHTML"
+                    class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+            </button>
+            <span id="sync-note-status"></span>
+
+            <!-- Delete Button -->
+            <button type="button"
+                    hx-post="{{ url_for('notes.delete_note', note_id=note.id) }}"
+                    hx-confirm="Delete this note?"
+                    hx-target="body"
+                    hx-swap="none"
+                    onclick="window.location.href='{{ url_for('notes.index') }}'"
+                    class="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 border border-red-300 rounded-md hover:bg-red-50">
+                Delete
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Tags -->
+    <div class="px-6 py-2 border-b border-gray-200 bg-gray-50">
+        <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+            </svg>
+            <input type="text" name="tags"
+                   value="{% if note %}{{ note.tags|map(attribute='name')|join(', ') }}{% endif %}"
+                   placeholder="Add tags (comma separated)"
+                   class="flex-1 text-sm border-0 bg-transparent focus:ring-0 focus:outline-none">
+        </div>
+    </div>
+
+    <!-- Editor Content -->
+    <div class="flex-1 flex overflow-hidden">
+        <!-- Editor Pane -->
+        <div id="editor-pane" class="flex-1 flex flex-col">
+            <textarea name="content"
+                      placeholder="Start writing..."
+                      class="note-editor flex-1 w-full p-6 text-gray-800 border-0 focus:ring-0 focus:outline-none resize-none"
+                      {% if note %}hx-post="{{ url_for('notes.edit_note', note_id=note.id) }}"
+                      hx-trigger="keyup changed delay:2000ms"
+                      hx-target="#save-status"
+                      hx-swap="innerHTML"
+                      hx-include="[name='title'], [name='file_type'], [name='folder_id'], [name='tags']"{% endif %}>{{ note.content if note else '' }}</textarea>
+        </div>
+
+        <!-- Preview Pane -->
+        <div id="preview-pane" class="hidden flex-1 overflow-y-auto p-6 bg-white prose prose-sm max-w-none">
+            <!-- Preview content loaded via HTMX -->
+        </div>
+    </div>
+</form>
+
+<script>
+    // Auto-resize textarea
+    const textarea = document.querySelector('textarea[name="content"]');
+    if (textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+    }
+</script>
+{% endblock %}

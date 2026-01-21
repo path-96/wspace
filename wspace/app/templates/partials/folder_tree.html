@@ -1,0 +1,32 @@
+{% macro render_folder(folder, depth=0) %}
+<div class="folder-item" style="padding-left: {{ depth * 12 }}px;">
+    <a href="{{ url_for('notes.index', folder_id=folder.id) }}"
+       class="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 rounded hover:bg-gray-100 group
+              {% if request.args.get('folder_id')|int == folder.id %}bg-blue-50 text-blue-700{% endif %}">
+        <svg class="w-4 h-4 flex-shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+        </svg>
+        <span class="truncate">{{ folder.name }}</span>
+        <span class="ml-auto text-xs text-gray-400">{{ folder.notes.count() }}</span>
+    </a>
+    {% if folder.children.count() > 0 %}
+        {% for child in folder.children %}
+            {{ render_folder(child, depth + 1) }}
+        {% endfor %}
+    {% endif %}
+</div>
+{% endmacro %}
+
+<!-- All Notes -->
+<a href="{{ url_for('notes.index') }}"
+   class="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 rounded hover:bg-gray-100 mb-1
+          {% if not request.args.get('folder_id') and not request.args.get('tag_id') %}bg-blue-50 text-blue-700{% endif %}">
+    <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+    </svg>
+    <span>All Notes</span>
+</a>
+
+{% for folder in folders %}
+    {{ render_folder(folder) }}
+{% endfor %}

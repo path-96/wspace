@@ -1,0 +1,15 @@
+{% if query %}
+<div class="space-y-1">
+    {% if results %}
+        {% for result in results %}
+        <a href="{{ url_for('notes.edit_note', note_id=result.id) }}"
+           class="block p-2 rounded hover:bg-gray-100 transition-colors">
+            <div class="text-sm font-medium text-gray-900 truncate">{{ result.title }}</div>
+            <div class="text-xs text-gray-500 truncate">{{ result.snippet }}</div>
+        </a>
+        {% endfor %}
+    {% else %}
+        <div class="text-xs text-gray-500 p-2">No results for "{{ query }}"</div>
+    {% endif %}
+</div>
+{% endif %}
