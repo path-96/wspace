@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings - Notes{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+
+        <!-- Notes Location -->
+        <div class="bg-white shadow rounded-lg p-6 mb-6">
+            <h2 class="text-lg font-medium text-gray-900 mb-4">Notes Storage Location</h2>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Current Location</label>
+                    <div class="flex items-center gap-3">
+                        <code class="flex-1 px-3 py-2 bg-gray-100 rounded text-sm text-gray-800">
+                            {{ user.notes_location or 'Not set' }}
+                        </code>
+                        <button onclick="document.getElementById('change-location-form').classList.toggle('hidden')"
+                                class="px-3 py-2 text-sm text-blue-600 hover:text-blue-700 font-medium">
+                            Change
+                        </button>
+                    </div>
+                </div>
+
+                <form id="change-location-form"
+                      action="{{ url_for('settings.set_location') }}"
+                      method="POST"
+                      class="hidden space-y-3 pt-3 border-t border-gray-200">
+                    <div>
+                        <label for="location" class="block text-sm font-medium text-gray-700 mb-1">
+                            New Location
+                        </label>
+                        <input type="text"
+                               id="location"
+                               name="location"
+                               placeholder="~/Documents/Notes"
+                               value="{{ user.notes_location or '~/Documents/Notes' }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit"
+                                class="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700">
+                            Save
+                        </button>
+                        <button type="button"
+                                onclick="document.getElementById('change-location-form').classList.add('hidden')"
+                                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-700">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Sync Settings -->
+        <div class="bg-white shadow rounded-lg p-6 mb-6">
+            <h2 class="text-lg font-medium text-gray-900 mb-4">Sync Settings</h2>
+
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-gray-900">Background Sync</p>
+                        <p class="text-sm text-gray-500">Automatically sync with Google Drive every 5 minutes</p>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded">Active</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Account -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <h2 class="text-lg font-medium text-gray-900 mb-4">Account</h2>
+
+            <div class="flex items-center gap-4">
+                {% if user.picture %}
+                <img src="{{ user.picture }}" alt="{{ user.name }}" class="w-12 h-12 rounded-full">
+                {% else %}
+                <div class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white text-lg">
+                    {{ user.name[0] if user.name else user.email[0] }}
+                </div>
+                {% endif %}
+                <div>
+                    <p class="font-medium text-gray-900">{{ user.name }}</p>
+                    <p class="text-sm text-gray-500">{{ user.email }}</p>
+                </div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <a href="{{ url_for('auth.logout') }}"
+                   class="text-sm text-red-600 hover:text-red-700">
+                    Sign out
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

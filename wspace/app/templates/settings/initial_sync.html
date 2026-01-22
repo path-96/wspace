@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syncing - Notes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="h-full bg-gray-50">
+    <div class="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8">
+            <div class="text-center">
+                <div id="sync-icon">
+                    <svg class="mx-auto h-16 w-16 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+                <h2 class="mt-4 text-2xl font-bold text-gray-900" id="sync-title">Syncing your notes...</h2>
+                <p class="mt-2 text-gray-600" id="sync-message">Pulling notes from Google Drive</p>
+            </div>
+
+            <div id="sync-result" class="hidden">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Trigger initial pull
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('{{ url_for("sync.auto_pull") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('sync-icon').innerHTML = `
+                    <svg class="mx-auto h-16 w-16 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                `;
+                document.getElementById('sync-title').textContent = 'Setup Complete!';
+
+                let message = '';
+                if (data.imported > 0) {
+                    message += `Imported ${data.imported} note${data.imported !== 1 ? 's' : ''}. `;
+                }
+                if (data.updated > 0) {
+                    message += `Updated ${data.updated} note${data.updated !== 1 ? 's' : ''}. `;
+                }
+                if (data.imported === 0 && data.updated === 0) {
+                    message = 'No notes found in Google Drive. Create your first note!';
+                }
+                document.getElementById('sync-message').textContent = message;
+
+                document.getElementById('sync-result').classList.remove('hidden');
+                document.getElementById('sync-result').innerHTML = `
+                    <a href="{{ url_for('notes.index') }}"
+                       class="block w-full text-center px-4 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                        Open Notes
+                    </a>
+                `;
+            })
+            .catch(error => {
+                document.getElementById('sync-icon').innerHTML = `
+                    <svg class="mx-auto h-16 w-16 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                `;
+                document.getElementById('sync-title').textContent = 'Setup Complete';
+                document.getElementById('sync-message').textContent = 'Could not sync with Google Drive. You can sync later from the app.';
+
+                document.getElementById('sync-result').classList.remove('hidden');
+                document.getElementById('sync-result').innerHTML = `
+                    <a href="{{ url_for('notes.index') }}"
+                       class="block w-full text-center px-4 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                        Open Notes
+                    </a>
+                `;
+            });
+        });
+    </script>
+</body>
+</html>

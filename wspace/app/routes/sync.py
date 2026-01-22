@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from app import db
 from app.models import Note, Folder
 from app.services.gdrive_service import GDriveService
+from app.services.file_storage import FileStorageService
 from app.routes.auth import login_required, get_current_user
 
 bp = Blueprint('sync', __name__, url_prefix='/sync')
@@ -179,6 +180,7 @@ def pull_from_drive():
         imported = 0
         updated = 0
         skipped = 0
+        pulled_notes = []
 
         # Get existing notes by gdrive_id for this user
         existing_by_gdrive_id = {n.gdrive_id: n for n in Note.query.filter_by(user_id=g.user.id).all() if n.gdrive_id}
@@ -227,6 +229,7 @@ def pull_from_drive():
                     note.file_type = file_type
                     note.sync_status = 'synced'
                     note.gdrive_modified = drive_modified
+                    pulled_notes.append(note)
                     updated += 1
                 else:
                     # Create new note
@@ -246,6 +249,7 @@ def pull_from_drive():
                         sync_status='synced'
                     )
                     db.session.add(note)
+                    pulled_notes.append(note)
                     imported += 1
             except Exception as e:
                 current_app.logger.warning(f"Failed to import {name}: {e}")
@@ -253,6 +257,9 @@ def pull_from_drive():
 
         db.session.commit()
         session['gdrive_credentials'] = service.get_credentials_dict()
+
+        # Save pulled notes to filesystem
+        save_notes_to_filesystem(pulled_notes, g.user)
 
         result = {
             'imported': imported,
@@ -312,3 +319,120 @@ def sync_note(note_id):
         if request.headers.get('HX-Request'):
             return render_template('partials/sync_error.html', error=str(e))
         return jsonify({'error': str(e)}), 500
+
+
+def save_notes_to_filesystem(notes, user):
+    """Save notes to the local filesystem."""
+    if not user or not user.notes_location:
+        return 0
+
+    try:
+        storage = FileStorageService(user.notes_location)
+        return storage.sync_all_notes(notes)
+    except Exception as e:
+        current_app.logger.error(f"Filesystem sync error: {e}")
+        return 0
+
+
+@bp.route('/auto-pull', methods=['POST'])
+@login_required
+def auto_pull():
+    """Auto-pull from Google Drive (used during initial setup)."""
+    credentials = session.get('gdrive_credentials')
+    if not credentials:
+        return jsonify({'imported': 0, 'updated': 0, 'skipped': 0, 'error': 'Not connected'})
+
+    try:
+        service = GDriveService(current_app.config, credentials)
+        root_folder_id = service.get_or_create_notes_folder()
+
+        # Get all files from Drive recursively
+        drive_files = service.list_all_files_recursive(root_folder_id)
+
+        imported = 0
+        updated = 0
+        skipped = 0
+
+        # Get existing notes by gdrive_id for this user
+        existing_by_gdrive_id = {n.gdrive_id: n for n in Note.query.filter_by(user_id=g.user.id).all() if n.gdrive_id}
+
+        pulled_notes = []
+
+        for item in drive_files:
+            if item['is_folder']:
+                continue
+
+            name = item['name']
+            mime_type = item.get('mimeType', '')
+            drive_modified = parse_drive_time(item.get('modifiedTime'))
+
+            # Determine file type based on extension or mime type
+            if name.endswith('.md'):
+                title = name[:-3]
+                file_type = 'md'
+            elif name.endswith('.txt'):
+                title = name[:-4]
+                file_type = 'txt'
+            elif mime_type == 'application/vnd.google-apps.document':
+                title = name
+                file_type = 'md'
+            else:
+                skipped += 1
+                continue
+
+            # Get folder path
+            path = item.get('path', '')
+            path_parts = path.split('/')[:-1] if '/' in path else []
+
+            try:
+                if item['id'] in existing_by_gdrive_id:
+                    note = existing_by_gdrive_id[item['id']]
+
+                    if note.gdrive_modified and drive_modified:
+                        if drive_modified <= note.gdrive_modified:
+                            skipped += 1
+                            continue
+
+                    content = service.download_file(item['id'], mime_type)
+                    note.title = title
+                    note.content = content
+                    note.file_type = file_type
+                    note.sync_status = 'synced'
+                    note.gdrive_modified = drive_modified
+                    pulled_notes.append(note)
+                    updated += 1
+                else:
+                    content = service.download_file(item['id'], mime_type)
+                    local_folder = get_or_create_folder_by_path(path_parts, g.user.id) if path_parts else None
+
+                    note = Note(
+                        title=title,
+                        content=content,
+                        file_type=file_type,
+                        user_id=g.user.id,
+                        folder_id=local_folder.id if local_folder else None,
+                        gdrive_id=item['id'],
+                        gdrive_modified=drive_modified,
+                        sync_status='synced'
+                    )
+                    db.session.add(note)
+                    pulled_notes.append(note)
+                    imported += 1
+            except Exception as e:
+                current_app.logger.warning(f"Failed to import {name}: {e}")
+                skipped += 1
+
+        db.session.commit()
+        session['gdrive_credentials'] = service.get_credentials_dict()
+
+        # Save all pulled notes to filesystem
+        save_notes_to_filesystem(pulled_notes, g.user)
+
+        return jsonify({
+            'imported': imported,
+            'updated': updated,
+            'skipped': skipped
+        })
+    except Exception as e:
+        current_app.logger.error(f"Auto-pull error: {e}")
+        return jsonify({'imported': 0, 'updated': 0, 'skipped': 0, 'error': str(e)})

@@ -3,6 +3,7 @@ from app import db
 from app.models import Note, Folder, Tag
 from app.routes.auth import login_required, get_current_user
 from app.services.gdrive_service import GDriveService
+from app.services.file_storage import FileStorageService
 
 bp = Blueprint('notes', __name__)
 
@@ -76,6 +77,34 @@ def auto_delete_from_drive(gdrive_id):
         return False
 
 
+def save_note_to_filesystem(note):
+    """Save a note to the local filesystem."""
+    if not g.user or not g.user.notes_location:
+        return False
+
+    try:
+        storage = FileStorageService(g.user.notes_location)
+        storage.save_note(note)
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Filesystem save error: {e}")
+        return False
+
+
+def delete_note_from_filesystem(note):
+    """Delete a note from the local filesystem."""
+    if not g.user or not g.user.notes_location:
+        return False
+
+    try:
+        storage = FileStorageService(g.user.notes_location)
+        storage.delete_note(note)
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Filesystem delete error: {e}")
+        return False
+
+
 @bp.before_request
 def load_user():
     """Load current user before each request."""
@@ -133,6 +162,9 @@ def new_note():
         db.session.add(note)
         db.session.commit()
 
+        # Save to local filesystem
+        save_note_to_filesystem(note)
+
         # Auto-sync to Google Drive
         auto_sync_note(note)
 
@@ -179,6 +211,9 @@ def edit_note(note_id):
 
         db.session.commit()
 
+        # Save to local filesystem
+        save_note_to_filesystem(note)
+
         # Auto-sync to Google Drive
         synced = auto_sync_note(note)
 
@@ -197,6 +232,9 @@ def delete_note(note_id):
     """Delete a note."""
     note = Note.query.filter_by(id=note_id, user_id=g.user.id).first_or_404()
     gdrive_id = note.gdrive_id
+
+    # Delete from local filesystem
+    delete_note_from_filesystem(note)
 
     db.session.delete(note)
     db.session.commit()

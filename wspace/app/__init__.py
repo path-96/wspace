@@ -14,17 +14,22 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
 
-    from app.routes import auth, notes, folders, tags, search, sync
+    from app.routes import auth, notes, folders, tags, search, sync, settings
     app.register_blueprint(auth.bp)
     app.register_blueprint(notes.bp)
     app.register_blueprint(folders.bp)
     app.register_blueprint(tags.bp)
     app.register_blueprint(search.bp)
     app.register_blueprint(sync.bp)
+    app.register_blueprint(settings.bp)
 
     with app.app_context():
         db.create_all()
         from app.services.search_service import setup_fts
         setup_fts(db)
+
+    # Initialize background scheduler
+    from app.services.scheduler import init_scheduler
+    init_scheduler(app)
 
     return app

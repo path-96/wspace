@@ -5,3 +5,4 @@ python-dotenv==1.0.0
 markdown==3.5.1
 google-api-python-client==2.111.0
 google-auth-oauthlib==1.2.0
+APScheduler==3.10.4

@@ -138,6 +138,10 @@ def callback():
         # Debug: log granted scopes
         current_app.logger.info(f"Granted scopes: {credentials.scopes}")
 
+        # Check if user needs to set up notes location
+        if not user.notes_location:
+            return redirect(url_for('settings.setup'))
+
         return redirect(url_for('notes.index'))
 
     except Exception as e:
