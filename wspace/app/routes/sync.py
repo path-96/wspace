@@ -1,21 +1,70 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, current_app
+from datetime import datetime, timezone
+from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, current_app, g
 from app import db
 from app.models import Note, Folder
 from app.services.gdrive_service import GDriveService
+from app.routes.auth import login_required, get_current_user
 
 bp = Blueprint('sync', __name__, url_prefix='/sync')
 
 
+@bp.before_request
+def load_user():
+    """Load current user before each request."""
+    g.user = get_current_user()
+
+
+def get_folder_path(folder):
+    """Get folder path as list of names from root to folder."""
+    if not folder:
+        return []
+    path = []
+    current = folder
+    while current:
+        path.insert(0, current.name)
+        current = current.parent
+    return path
+
+
+def get_or_create_folder_by_path(path_parts, user_id):
+    """Get or create a local folder by path, creating parents as needed."""
+    if not path_parts:
+        return None
+
+    parent = None
+    for name in path_parts:
+        folder = Folder.query.filter_by(name=name, parent_id=parent.id if parent else None, user_id=user_id).first()
+        if not folder:
+            folder = Folder(name=name, parent_id=parent.id if parent else None, user_id=user_id)
+            db.session.add(folder)
+            db.session.flush()
+        parent = folder
+
+    return parent
+
+
+def parse_drive_time(time_str):
+    """Parse Google Drive timestamp to datetime."""
+    if not time_str:
+        return None
+    try:
+        # Handle format: 2024-01-15T10:30:00.000Z
+        return datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+    except:
+        return None
+
+
 @bp.route('/')
+@login_required
 def sync_status():
     """Show sync status."""
     credentials = session.get('gdrive_credentials')
     is_connected = credentials is not None
 
-    notes_count = Note.query.count()
-    synced_count = Note.query.filter_by(sync_status='synced').count()
-    local_count = Note.query.filter_by(sync_status='local').count()
-    conflict_count = Note.query.filter_by(sync_status='conflict').count()
+    notes_count = Note.query.filter_by(user_id=g.user.id).count()
+    synced_count = Note.query.filter_by(user_id=g.user.id, sync_status='synced').count()
+    local_count = Note.query.filter_by(user_id=g.user.id, sync_status='local').count()
+    conflict_count = Note.query.filter_by(user_id=g.user.id, sync_status='conflict').count()
 
     status = {
         'connected': is_connected,
@@ -60,6 +109,7 @@ def oauth_callback():
 
 
 @bp.route('/disconnect', methods=['POST'])
+@login_required
 def disconnect():
     """Disconnect Google Drive."""
     session.pop('gdrive_credentials', None)
@@ -69,31 +119,39 @@ def disconnect():
 
 
 @bp.route('/sync-all', methods=['POST'])
+@login_required
 def sync_all():
-    """Sync all notes with Google Drive."""
+    """Push all local changes to Google Drive."""
     credentials = session.get('gdrive_credentials')
     if not credentials:
         return jsonify({'error': 'Not connected to Google Drive'}), 401
 
     try:
         service = GDriveService(current_app.config, credentials)
+        root_folder_id = service.get_or_create_notes_folder()
 
-        # Get or create Notes folder in Drive
-        folder_id = service.get_or_create_notes_folder()
-
-        # Sync local notes to Drive
-        notes = Note.query.filter_by(sync_status='local').all()
+        # Only sync notes marked as 'local' (changed since last sync)
+        notes = Note.query.filter_by(user_id=g.user.id, sync_status='local').all()
         for note in notes:
+            # Get target folder in Drive
+            if note.folder:
+                folder_path = get_folder_path(note.folder)
+                target_folder_id = service.get_or_create_folder_path(folder_path, root_folder_id)
+                if not note.folder.gdrive_id:
+                    note.folder.gdrive_id = target_folder_id
+            else:
+                target_folder_id = root_folder_id
+
             filename = f"{note.title}.{note.file_type}"
             if note.gdrive_id:
-                service.update_file(note.gdrive_id, note.content, filename)
+                service.update_file(note.gdrive_id, note.content, filename, target_folder_id)
             else:
-                note.gdrive_id = service.upload_file(note.content, filename, folder_id)
+                note.gdrive_id = service.upload_file(note.content, filename, target_folder_id)
+
             note.sync_status = 'synced'
+            note.gdrive_modified = datetime.now(timezone.utc)
 
         db.session.commit()
-
-        # Update credentials in session (they may have been refreshed)
         session['gdrive_credentials'] = service.get_credentials_dict()
 
         return sync_status()
@@ -103,26 +161,146 @@ def sync_all():
         return jsonify({'error': str(e)}), 500
 
 
+@bp.route('/pull', methods=['POST'])
+@login_required
+def pull_from_drive():
+    """Pull new/changed notes from Google Drive (incremental)."""
+    credentials = session.get('gdrive_credentials')
+    if not credentials:
+        return jsonify({'error': 'Not connected to Google Drive'}), 401
+
+    try:
+        service = GDriveService(current_app.config, credentials)
+        root_folder_id = service.get_or_create_notes_folder()
+
+        # Get all files from Drive recursively
+        drive_files = service.list_all_files_recursive(root_folder_id)
+
+        imported = 0
+        updated = 0
+        skipped = 0
+
+        # Get existing notes by gdrive_id for this user
+        existing_by_gdrive_id = {n.gdrive_id: n for n in Note.query.filter_by(user_id=g.user.id).all() if n.gdrive_id}
+
+        for item in drive_files:
+            if item['is_folder']:
+                continue
+
+            name = item['name']
+            mime_type = item.get('mimeType', '')
+            drive_modified = parse_drive_time(item.get('modifiedTime'))
+
+            # Determine file type based on extension or mime type
+            if name.endswith('.md'):
+                title = name[:-3]
+                file_type = 'md'
+            elif name.endswith('.txt'):
+                title = name[:-4]
+                file_type = 'txt'
+            elif mime_type == 'application/vnd.google-apps.document':
+                # Google Docs - treat as markdown
+                title = name
+                file_type = 'md'
+            else:
+                skipped += 1
+                continue
+
+            # Get folder path (excluding the filename)
+            path = item.get('path', '')
+            path_parts = path.split('/')[:-1] if '/' in path else []
+
+            try:
+                # Check if note already exists
+                if item['id'] in existing_by_gdrive_id:
+                    note = existing_by_gdrive_id[item['id']]
+
+                    # Only update if Drive version is newer
+                    if note.gdrive_modified and drive_modified:
+                        if drive_modified <= note.gdrive_modified:
+                            skipped += 1
+                            continue
+
+                    content = service.download_file(item['id'], mime_type)
+                    note.title = title
+                    note.content = content
+                    note.file_type = file_type
+                    note.sync_status = 'synced'
+                    note.gdrive_modified = drive_modified
+                    updated += 1
+                else:
+                    # Create new note
+                    content = service.download_file(item['id'], mime_type)
+
+                    # Get or create local folder
+                    local_folder = get_or_create_folder_by_path(path_parts, g.user.id) if path_parts else None
+
+                    note = Note(
+                        title=title,
+                        content=content,
+                        file_type=file_type,
+                        user_id=g.user.id,
+                        folder_id=local_folder.id if local_folder else None,
+                        gdrive_id=item['id'],
+                        gdrive_modified=drive_modified,
+                        sync_status='synced'
+                    )
+                    db.session.add(note)
+                    imported += 1
+            except Exception as e:
+                current_app.logger.warning(f"Failed to import {name}: {e}")
+                skipped += 1
+
+        db.session.commit()
+        session['gdrive_credentials'] = service.get_credentials_dict()
+
+        result = {
+            'imported': imported,
+            'updated': updated,
+            'skipped': skipped
+        }
+
+        if request.headers.get('HX-Request'):
+            return render_template('partials/pull_result.html', result=result)
+        return jsonify(result)
+    except Exception as e:
+        current_app.logger.error(f"Pull from Drive error: {e}")
+        if request.headers.get('HX-Request'):
+            return render_template('partials/sync_error.html', error=str(e))
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.route('/sync-note/<int:note_id>', methods=['POST'])
+@login_required
 def sync_note(note_id):
     """Sync a single note with Google Drive."""
     credentials = session.get('gdrive_credentials')
     if not credentials:
         return jsonify({'error': 'Not connected to Google Drive'}), 401
 
-    note = Note.query.get_or_404(note_id)
+    note = Note.query.filter_by(id=note_id, user_id=g.user.id).first_or_404()
 
     try:
         service = GDriveService(current_app.config, credentials)
-        folder_id = service.get_or_create_notes_folder()
+        root_folder_id = service.get_or_create_notes_folder()
+
+        # Get target folder in Drive
+        if note.folder:
+            folder_path = get_folder_path(note.folder)
+            target_folder_id = service.get_or_create_folder_path(folder_path, root_folder_id)
+            if not note.folder.gdrive_id:
+                note.folder.gdrive_id = target_folder_id
+        else:
+            target_folder_id = root_folder_id
 
         filename = f"{note.title}.{note.file_type}"
         if note.gdrive_id:
-            service.update_file(note.gdrive_id, note.content, filename)
+            service.update_file(note.gdrive_id, note.content, filename, target_folder_id)
         else:
-            note.gdrive_id = service.upload_file(note.content, filename, folder_id)
+            note.gdrive_id = service.upload_file(note.content, filename, target_folder_id)
 
         note.sync_status = 'synced'
+        note.gdrive_modified = datetime.now(timezone.utc)
         db.session.commit()
 
         session['gdrive_credentials'] = service.get_credentials_dict()

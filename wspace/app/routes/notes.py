@@ -7,21 +7,45 @@ from app.services.gdrive_service import GDriveService
 bp = Blueprint('notes', __name__)
 
 
+def get_folder_path(folder):
+    """Get folder path as list of names from root to folder."""
+    if not folder:
+        return []
+    path = []
+    current = folder
+    while current:
+        path.insert(0, current.name)
+        current = current.parent
+    return path
+
+
 def auto_sync_note(note):
-    """Auto-sync a note to Google Drive if connected."""
+    """Auto-sync a note to Google Drive if connected, preserving folder structure."""
     credentials = session.get('gdrive_credentials')
     if not credentials:
         return False
 
     try:
         service = GDriveService(current_app.config, credentials)
-        folder_id = service.get_or_create_notes_folder()
+        root_folder_id = service.get_or_create_notes_folder()
+
+        # Get the target folder in Drive (create folder structure if needed)
+        if note.folder:
+            folder_path = get_folder_path(note.folder)
+            target_folder_id = service.get_or_create_folder_path(folder_path, root_folder_id)
+
+            # Update folder's gdrive_id if not set
+            if not note.folder.gdrive_id:
+                note.folder.gdrive_id = target_folder_id
+        else:
+            target_folder_id = root_folder_id
 
         filename = f"{note.title}.{note.file_type}"
         if note.gdrive_id:
-            service.update_file(note.gdrive_id, note.content, filename)
+            # Update file, potentially moving to new folder
+            service.update_file(note.gdrive_id, note.content, filename, target_folder_id)
         else:
-            note.gdrive_id = service.upload_file(note.content, filename, folder_id)
+            note.gdrive_id = service.upload_file(note.content, filename, target_folder_id)
 
         note.sync_status = 'synced'
         db.session.commit()
