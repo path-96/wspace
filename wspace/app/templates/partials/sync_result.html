@@ -1,0 +1,22 @@
+<div class="p-3 text-sm bg-green-50 border border-green-200 rounded-lg">
+    <div class="flex items-center gap-2 mb-1 text-green-700">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        <span class="font-medium">Sync Complete</span>
+    </div>
+    <div class="text-green-600 space-y-0.5">
+        {% if pulled > 0 %}
+        <p>{{ pulled }} note{{ 's' if pulled != 1 else '' }} pulled from Drive</p>
+        {% endif %}
+        {% if pushed > 0 %}
+        <p>{{ pushed }} note{{ 's' if pushed != 1 else '' }} pushed to Drive</p>
+        {% endif %}
+        {% if pulled == 0 and pushed == 0 %}
+        <p>Everything is up to date</p>
+        {% endif %}
+    </div>
+    <button onclick="window.location.reload()" class="mt-2 text-xs text-green-700 hover:text-green-800 underline">
+        Refresh page
+    </button>
+</div>
